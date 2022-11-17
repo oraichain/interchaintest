@@ -8,7 +8,6 @@ import (
 
 	"github.com/strangelove-ventures/ibctest/v3"
 	"github.com/strangelove-ventures/ibctest/v3/chain/cosmos"
-	"github.com/strangelove-ventures/ibctest/v3/chain/cosmos/wasm"
 	"github.com/strangelove-ventures/ibctest/v3/ibc"
 	"github.com/strangelove-ventures/ibctest/v3/test"
 	"github.com/strangelove-ventures/ibctest/v3/testreporter"
@@ -26,14 +25,11 @@ func TestWasmIbc(t *testing.T) {
 	// Chain Factory
 	cf := ibctest.NewBuiltinChainFactory(zaptest.NewLogger(t), []*ibctest.ChainSpec{
 		{Name: "juno", ChainName: "juno1", Version: "latest", ChainConfig: ibc.ChainConfig{
-			GasPrices:  "0.00ujuno",
-			EncodingConfig: wasm.WasmEncoding(),
+			GasPrices: "0.00ujuno",
 		}},
 		{Name: "juno", ChainName: "juno2", Version: "latest", ChainConfig: ibc.ChainConfig{
-			GasPrices:  "0.00ujuno",
-			EncodingConfig: wasm.WasmEncoding(),
+			GasPrices: "0.00ujuno",
 		}},
-
 	})
 
 	chains, err := cf.Chains(t.Name())
@@ -71,7 +67,7 @@ func TestWasmIbc(t *testing.T) {
 		Client:            client,
 		NetworkID:         network,
 		BlockDatabaseFile: ibctest.DefaultBlockDatabaseFilepath(),
-		SkipPathCreation: false,
+		SkipPathCreation:  false,
 	}))
 	t.Cleanup(func() {
 		_ = ic.Close()
@@ -114,15 +110,15 @@ func TestWasmIbc(t *testing.T) {
 	ibcReflectSendCodeId, err := juno1Chain.StoreContract(
 		ctx, juno1User.KeyName, "sample_contracts/ibc_reflect_send.wasm")
 	require.NoError(t, err)
-	
+
 	// Instantiate ibc_reflect_send.wasm contract
 	ibcReflectSendContractAddr, err := juno1Chain.InstantiateContract(
-		ctx, juno1User.KeyName, ibcReflectSendCodeId, "{}",	true)
+		ctx, juno1User.KeyName, ibcReflectSendCodeId, "{}", true)
 	require.NoError(t, err)
-	
+
 	// Store reflect.wasm contract
 	reflectCodeId, err := juno2Chain.StoreContract(
-		ctx, juno2User.KeyName,	"sample_contracts/reflect.wasm")
+		ctx, juno2User.KeyName, "sample_contracts/reflect.wasm")
 	require.NoError(t, err)
 
 	// Instantiate reflect.wasm contract
@@ -148,10 +144,10 @@ func TestWasmIbc(t *testing.T) {
 	ibcReflectSendPortId := "wasm." + ibcReflectSendContractAddr
 	ibcReflectPortId := "wasm." + ibcReflectContractAddr
 	err = r.CreateChannel(ctx, eRep, ibcPath, ibc.CreateChannelOptions{
-				SourcePortName: ibcReflectSendPortId,
-				DestPortName: ibcReflectPortId,
-				Order: ibc.Ordered,
-				Version: "ibc-reflect-v1",
+		SourcePortName: ibcReflectSendPortId,
+		DestPortName:   ibcReflectPortId,
+		Order:          ibc.Ordered,
+		Version:        "ibc-reflect-v1",
 	})
 	require.NoError(t, err)
 
@@ -176,7 +172,7 @@ func TestWasmIbc(t *testing.T) {
 	err = juno2Chain.QueryContract(ctx, ibcReflectContractAddr, queryMsg, &ibcReflectResponse)
 	require.NoError(t, err)
 	require.NotEmpty(t, ibcReflectResponse.Data.Account)
-	
+
 	// Verify that these addresses match, a match is a successful test run
 	//    - ibc_reflect_send contract (Juno1) remote address (retrieved via ibc)
 	//    - ibc_reflect contract (Juno2) account address populated locally
@@ -201,9 +197,9 @@ type Coin struct {
 type Coins []Coin
 
 type IbcReflectSendAccountResponse struct {
-	LastUpdateTime uint64            `json:"last_update_time,string"`
-	RemoteAddr     string            `json:"remote_addr"`
-	RemoteBalance  Coins 		 	 `json:"remote_balance"`
+	LastUpdateTime uint64 `json:"last_update_time,string"`
+	RemoteAddr     string `json:"remote_addr"`
+	RemoteBalance  Coins  `json:"remote_balance"`
 }
 
 // ibc_reflect_send response data
@@ -212,7 +208,7 @@ type IbcReflectSendResponseData struct {
 }
 
 type IbcReflectAccountResponse struct {
-	Account     string            `json:"account"`
+	Account string `json:"account"`
 }
 
 // ibc_reflect response data
