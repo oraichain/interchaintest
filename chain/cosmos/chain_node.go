@@ -198,12 +198,12 @@ func (tn *ChainNode) HomeDir() string {
 
 // SetTestConfig modifies the config to reasonable values for use within ibctest.
 func (tn *ChainNode) SetTestConfig(ctx context.Context) error {
-	c := make(configutil.Toml)
+	c := make(test.Toml)
 
 	// Set Log Level to info
 	c["log_level"] = "info"
 
-	p2p := make(configutil.Toml)
+	p2p := make(test.Toml)
 
 	// Allow p2p strangeness
 	p2p["allow_duplicate_ip"] = true
@@ -211,7 +211,7 @@ func (tn *ChainNode) SetTestConfig(ctx context.Context) error {
 
 	c["p2p"] = p2p
 
-	consensus := make(configutil.Toml)
+	consensus := make(test.Toml)
 
 	blockT := (time.Duration(blockTime) * time.Second).String()
 	consensus["timeout_commit"] = blockT
@@ -219,14 +219,14 @@ func (tn *ChainNode) SetTestConfig(ctx context.Context) error {
 
 	c["consensus"] = consensus
 
-	rpc := make(configutil.Toml)
+	rpc := make(test.Toml)
 
 	// Enable public RPC
 	rpc["laddr"] = "tcp://0.0.0.0:26657"
 
 	c["rpc"] = rpc
 
-	return configutil.ModifyTomlConfigFile(
+	if err := test.ModifyTomlConfigFile(
 		ctx,
 		tn.logger(),
 		tn.DockerClient,
@@ -234,6 +234,20 @@ func (tn *ChainNode) SetTestConfig(ctx context.Context) error {
 		tn.VolumeName,
 		"config/config.toml",
 		c,
+	); err != nil {
+		return err
+	}
+
+	a := make(test.Toml)
+	a["minimum-gas-prices"] = tn.Chain.Config().GasPrices
+	return test.ModifyTomlConfigFile(
+		ctx,
+		tn.logger(),
+		tn.DockerClient,
+		tn.TestName,
+		tn.VolumeName,
+		"config/app.toml",
+		a,
 	)
 }
 

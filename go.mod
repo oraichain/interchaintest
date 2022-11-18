@@ -2,14 +2,26 @@ module github.com/strangelove-ventures/ibctest/v3
 
 go 1.18
 
+replace (
+	github.com/ChainSafe/go-schnorrkel => github.com/ChainSafe/go-schnorrkel v0.0.0-20200405005733-88cbf1b4c40d
+	github.com/ChainSafe/go-schnorrkel/1 => github.com/ChainSafe/go-schnorrkel v1.0.0
+	github.com/NicholasDotSol/duality => ../../duality-labs/duality
+	github.com/cosmos/admin-module => github.com/jtieri/admin-module v0.0.0-20221116191954-1d63d5fc9608
+	github.com/cosmos/ibc-go/v3 => github.com/jtieri/ibc-go/v3 v3.0.0-beta1.0.20221116191630-01c53c7f66f3
+	github.com/cosmos/interchain-security v0.0.0-20221102103028-d7f8d448be65 => github.com/jtieri/interchain-security v0.0.0-20221116194529-59bf07eb134f
+	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
+	github.com/vedhavyas/go-subkey => github.com/strangelove-ventures/go-subkey v1.0.7
+)
+
 require (
 	github.com/BurntSushi/toml v1.2.0
 	github.com/ChainSafe/go-schnorrkel/1 v0.0.0-00010101000000-000000000000
+	github.com/NicholasDotSol/duality v0.0.0-00010101000000-000000000000
 	github.com/StirlingMarketingGroup/go-namecase v1.0.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/avast/retry-go/v4 v4.0.4
 	github.com/centrifuge/go-substrate-rpc-client/v4 v4.0.4
-	github.com/cosmos/cosmos-sdk v0.45.2-0.20220901181011-06d4a64bf808
+	github.com/cosmos/cosmos-sdk v0.45.7-0.20221104161803-456ca5663c5e
 	github.com/cosmos/ibc-go/v3 v3.0.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/decred/dcrd/dcrec/secp256k1/v2 v2.0.0
@@ -22,13 +34,13 @@ require (
 	github.com/mr-tron/base58 v1.2.0
 	github.com/rivo/tview v0.0.0-20220307222120-9994674d60a8
 	github.com/stretchr/testify v1.8.0
-	github.com/tendermint/tendermint v0.34.14
+	github.com/tendermint/tendermint v0.34.19
 	go.uber.org/multierr v1.8.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/tools v0.1.12
-	google.golang.org/grpc v1.49.0
+	google.golang.org/grpc v1.50.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.17.3
 )
@@ -111,7 +123,6 @@ require (
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moby/term v0.0.0-20221105221325-4eb28fa6025c // indirect
-	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/multiformats/go-base32 v0.0.3 // indirect
 	github.com/multiformats/go-base36 v0.1.0 // indirect
@@ -158,7 +169,6 @@ require (
 	github.com/zondax/hid v0.9.1-0.20220302062450-5552068d2266 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
-	go.uber.org/goleak v1.1.12 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
 	golang.org/x/net v0.0.0-20220906165146-f3363e06e74c // indirect
 	golang.org/x/sys v0.0.0-20220907062415-87db552b00fd // indirect
@@ -182,15 +192,3 @@ require (
 	modernc.org/token v1.0.0 // indirect
 	nhooyr.io/websocket v1.8.7 // indirect
 )
-
-replace github.com/vedhavyas/go-subkey => github.com/strangelove-ventures/go-subkey v1.0.7
-
-replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
-
-replace github.com/cosmos/ibc-go/v3 => github.com/jtieri/ibc-go/v3 v3.0.0-beta1.0.20221116191630-01c53c7f66f3
-
-//replace github.com/keybase/go-keychain => github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4
-
-replace github.com/ChainSafe/go-schnorrkel => github.com/ChainSafe/go-schnorrkel v0.0.0-20200405005733-88cbf1b4c40d
-
-replace github.com/ChainSafe/go-schnorrkel/1 => github.com/ChainSafe/go-schnorrkel v1.0.0
