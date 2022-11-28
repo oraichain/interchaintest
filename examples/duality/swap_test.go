@@ -198,7 +198,7 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	require.Equal(t, ibcTransferAmount, dualityBalCurrent)
 
 	// dualityd tx dex deposit [receiver] [token-a] [token-b] [list of amount-0] [list of amount-1] [list of tick-index] [list of fee] [flags]
-	depositAmount, err := sdktypes.NewDecFromStr(strconv.FormatInt(1000, 10))
+	depositAmount, err := sdktypes.NewDecFromStr(strconv.FormatInt(100000, 10))
 	require.NoError(t, err)
 
 	depositCmd := []string{
@@ -214,37 +214,23 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 		"--node", duality.GetRPCAddress(),
 		"--from", dualityKey.KeyName,
 		"--keyring-backend", "test",
+		"--gas", "auto",
 		"--yes",
 		"--home", duality.HomeDir(),
 	}
 
 	// Execute the deposit cmd to initialize the pool on Duality
-	stdout, stderr, err := duality.Exec(ctx, depositCmd, nil)
+	_, _, err = duality.Exec(ctx, depositCmd, nil)
 	require.NoError(t, err)
 
 	// Wait for the tx to be included in a block
 	err = test.WaitForBlocks(ctx, 5, duality)
 	require.NoError(t, err)
 
-	// Query for the token pair map
-	queryTokensCmd := []string{
-		duality.Config().Bin, "q", "dex", "list-pair-map",
-		"--chain-id", duality.Config().ChainID,
-		"--node", duality.GetRPCAddress(),
-		"--home", duality.HomeDir(),
-	}
-
-	// Query the token pair map
-	stdout, stderr, err = duality.Exec(ctx, queryTokensCmd, nil)
-	require.NoError(t, err)
-
-	t.Logf("STDOUT: %s \n", stdout)
-	t.Logf("STDERR: %s \n", stderr)
-
 	// Assert that the deposit was successful and the funds are moved out of the Duality user acc
 	dualityBalIBC, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
 	require.NoError(t, err)
-	require.Equal(t, 0, dualityBalIBC)
+	require.Equal(t, ibcTransferAmount-depositAmount.RoundInt64(), dualityBalIBC)
 
 	dualityBalNative, err := duality.GetBalance(ctx, dualityKey.Address, duality.Config().Denom)
 	require.NoError(t, err)
