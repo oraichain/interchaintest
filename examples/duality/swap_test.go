@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/NicholasDotSol/duality/x/dex/types"
+	swaptypes "github.com/NicholasDotSol/duality/x/ibc-swap/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	transfertypes "github.com/cosmos/ibc-go/v3/modules/apps/transfer/types"
@@ -113,8 +115,7 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	err = test.WaitForBlocks(ctx, 5, gaia)
 	require.NoError(t, err)
 
-	// Get our bech32 encoded user addresses on both chains
-	//dualityAddr := dualityKey.Bech32Address(duality.Config().Bech32Prefix)
+	// Get our bech32 encoded user address
 	gaiaAddr := gaiaKey.Bech32Address(gaia.Config().Bech32Prefix)
 
 	// Get the original acc balances on both chains for their native tokens
@@ -174,7 +175,10 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	}
 
 	// Send an IBC transfer from Gaia to Duality, so we can initialize a pool with the IBC denom token + native Duality token
-	transferTx, err := gaia.SendIBCTransfer(ctx, channel.ChannelID, gaiaAddr, transfer, nil)
+	transferTx, err := gaia.SendIBCTransfer(ctx, channel.ChannelID, gaiaAddr, transfer, ibc.TransferOptions{
+		Timeout: nil,
+		Memo:    "",
+	})
 	require.NoError(t, err)
 
 	gaiaHeight, err := gaia.Height(ctx)
@@ -189,13 +193,13 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	gaiaDenomTrace := transfertypes.ParseDenomTrace(gaiaTokenDenom)
 
 	// Assert that the funds are gone from the acc on Gaia and present in the acc on Duality
-	gaiaBalCurrent, err := gaia.GetBalance(ctx, gaiaAddr, gaia.Config().Denom)
+	gaiaBalTransfer, err := gaia.GetBalance(ctx, gaiaAddr, gaia.Config().Denom)
 	require.NoError(t, err)
-	require.Equal(t, gaiaOrigBalNative-ibcTransferAmount, gaiaBalCurrent)
+	require.Equal(t, gaiaOrigBalNative-ibcTransferAmount, gaiaBalTransfer)
 
-	dualityBalCurrent, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
+	dualityBalIBCTransfer, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
 	require.NoError(t, err)
-	require.Equal(t, ibcTransferAmount, dualityBalCurrent)
+	require.Equal(t, ibcTransferAmount, dualityBalIBCTransfer)
 
 	// dualityd tx dex deposit [receiver] [token-a] [token-b] [list of amount-0] [list of amount-1] [list of tick-index] [list of fee] [flags]
 	depositAmount, err := sdktypes.NewDecFromStr(strconv.FormatInt(100000, 10))
@@ -230,14 +234,62 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	// Assert that the deposit was successful and the funds are moved out of the Duality user acc
 	dualityBalIBC, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
 	require.NoError(t, err)
-	require.Equal(t, ibcTransferAmount-depositAmount.RoundInt64(), dualityBalIBC)
+	require.Equal(t, dualityBalIBCTransfer-depositAmount.RoundInt64(), dualityBalIBC)
 
 	dualityBalNative, err := duality.GetBalance(ctx, dualityKey.Address, duality.Config().Denom)
 	require.NoError(t, err)
-	require.Equal(t, dualityOrigBalNative-ibcTransferAmount, dualityBalNative)
+	require.Equal(t, dualityOrigBalNative-depositAmount.RoundInt64(), dualityBalNative)
 
-	t.Logf("BAL ALICE %s: %d \n", duality.Config().Denom, dualityBalNative)
-	t.Logf("BAL ALICE %s: %d \n", gaiaDenomTrace.IBCDenom(), dualityBalIBC)
+	// --- Begin the IBC transfer with the swap
+
+	swapAmount, err := sdktypes.NewDecFromStr(strconv.FormatInt(100000, 10))
+	require.NoError(t, err)
+
+	minOut, err := sdktypes.NewDecFromStr(strconv.FormatInt(100000, 10))
+	require.NoError(t, err)
+
+	metadata := swaptypes.PacketMetadata{
+		Swap: &swaptypes.SwapMetadata{
+			MsgSwap: &types.MsgSwap{
+				Creator:  dualityKey.Address,
+				Receiver: dualityKey.Address,
+				TokenA:   gaiaDenomTrace.IBCDenom(),
+				TokenB:   duality.Config().Denom,
+				AmountIn: swapAmount,
+				TokenIn:  gaiaDenomTrace.IBCDenom(),
+				MinOut:   minOut,
+			},
+			Next: "",
+		},
+	}
+
+	metadataBz, err := json.Marshal(metadata)
+	require.NoError(t, err)
+
+	gaiaHeight, err = gaia.Height(ctx)
+	require.NoError(t, err)
+
+	// Send an IBC transfer from Gaia to Duality with packet memo containing the swap metadata
+	transferTx, err = gaia.SendIBCTransfer(ctx, channel.ChannelID, gaiaAddr, transfer, ibc.TransferOptions{Memo: string(metadataBz)})
+	require.NoError(t, err)
+
+	// Poll for the ack to know that the swap is complete
+	_, err = test.PollForAck(ctx, gaia, gaiaHeight, gaiaHeight+10, transferTx.Packet)
+	require.NoError(t, err)
+
+	// Check that the funds are moved out of the acc on Gaia
+	gaiaBalAfterSwap, err := gaia.GetBalance(ctx, gaiaAddr, gaia.Config().Denom)
+	require.NoError(t, err)
+	require.Equal(t, gaiaBalTransfer-ibcTransferAmount, gaiaBalAfterSwap)
+
+	// Check that the funds are now present in the acc on Duality
+	dualityBalNativeSwap, err := duality.GetBalance(ctx, dualityKey.Address, duality.Config().Denom)
+	require.NoError(t, err)
+	require.Equal(t, dualityBalNative+minOut.RoundInt64(), dualityBalNativeSwap)
+
+	dualityBalIBCSwap, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
+	require.NoError(t, err)
+	require.Equal(t, dualityBalIBC, dualityBalIBCSwap)
 }
 
 // initDuality creates and funds the genesis wallets, initializes the nodes, adds the standalone consumer chain
@@ -294,7 +346,7 @@ func initDuality(
 
 	feeList := Fees{FeeList: []FeeList{
 		{0, 1},
-		{Id: 1, Fee: 3},
+		{Id: 1, Fee: 0},
 		{Id: 2, Fee: 5},
 		{Id: 3, Fee: 10},
 	}}
