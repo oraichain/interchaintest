@@ -242,11 +242,14 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 
 	// --- Begin the IBC transfer with the swap
 
-	swapAmount, err := sdktypes.NewDecFromStr(strconv.FormatInt(100000, 10))
-	require.NoError(t, err)
+	swapAmount := sdktypes.NewInt(100000)
+	minOut := sdktypes.NewInt(100000)
 
-	minOut, err := sdktypes.NewDecFromStr(strconv.FormatInt(100000, 10))
-	require.NoError(t, err)
+	//swapAmount, err := sdktypes.NewDecFromStr(strconv.FormatInt(100000, 10))
+	//require.NoError(t, err)
+
+	//minOut, err := sdktypes.NewDecFromStr(strconv.FormatInt(100000, 10))
+	//require.NoError(t, err)
 
 	metadata := swaptypes.PacketMetadata{
 		Swap: &swaptypes.SwapMetadata{
@@ -285,7 +288,7 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	// Check that the funds are now present in the acc on Duality
 	dualityBalNativeSwap, err := duality.GetBalance(ctx, dualityKey.Address, duality.Config().Denom)
 	require.NoError(t, err)
-	require.Equal(t, dualityBalNative+minOut.RoundInt64(), dualityBalNativeSwap)
+	require.Equal(t, dualityBalNative+minOut.Int64(), dualityBalNativeSwap)
 
 	dualityBalIBCSwap, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
 	require.NoError(t, err)
