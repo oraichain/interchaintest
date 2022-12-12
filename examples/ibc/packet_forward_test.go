@@ -7,9 +7,10 @@ import (
 	"time"
 
 	transfertypes "github.com/cosmos/ibc-go/v6/modules/apps/transfer/types"
-	ibctest "github.com/strangelove-ventures/ibctest/v6"
+	"github.com/strangelove-ventures/ibctest/v6"
 	"github.com/strangelove-ventures/ibctest/v6/chain/cosmos"
 	"github.com/strangelove-ventures/ibctest/v6/ibc"
+	"github.com/strangelove-ventures/ibctest/v6/internal/dockerutil"
 	"github.com/strangelove-ventures/ibctest/v6/relayer"
 	"github.com/strangelove-ventures/ibctest/v6/relayer/rly"
 	"github.com/strangelove-ventures/ibctest/v6/testreporter"
@@ -46,11 +47,16 @@ func TestPacketForwardMiddleware(t *testing.T) {
 
 	chainID_A, chainID_B, chainID_C, chainID_D := "chain-a", "chain-b", "chain-c", "chain-d"
 
+	img := []ibc.DockerImage{{
+		Repository: "gaia",
+		Version:    "local",
+		UidGid:     dockerutil.GetHeighlinerUserString(),
+	}}
 	cf := ibctest.NewBuiltinChainFactory(zaptest.NewLogger(t), []*ibctest.ChainSpec{
-		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: chainID_A, GasPrices: "0.0uatom"}},
-		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: chainID_B, GasPrices: "0.0uatom"}},
-		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: chainID_C, GasPrices: "0.0uatom"}},
-		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: chainID_D, GasPrices: "0.0uatom"}},
+		{Name: "gaia", ChainConfig: ibc.ChainConfig{ChainID: chainID_A, GasPrices: "0.0uatom", Images: img}},
+		{Name: "gaia", ChainConfig: ibc.ChainConfig{ChainID: chainID_B, GasPrices: "0.0uatom", Images: img}},
+		{Name: "gaia", ChainConfig: ibc.ChainConfig{ChainID: chainID_C, GasPrices: "0.0uatom", Images: img}},
+		{Name: "gaia", ChainConfig: ibc.ChainConfig{ChainID: chainID_D, GasPrices: "0.0uatom", Images: img}},
 	})
 
 	chains, err := cf.Chains(t.Name())
