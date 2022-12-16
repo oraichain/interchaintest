@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/NicholasDotSol/duality/x/dex/types"
 	swaptypes "github.com/NicholasDotSol/duality/x/ibc-swap/types"
@@ -18,13 +19,14 @@ import (
 	"github.com/strangelove-ventures/ibctest/v3/relayer/rly"
 	"github.com/strangelove-ventures/ibctest/v3/test"
 	"github.com/strangelove-ventures/ibctest/v3/testreporter"
+	forwardtypes "github.com/strangelove-ventures/packet-forward-middleware/v3/router/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
 
-// TestDualityIBCSwapMiddleware asserts that the IBC swap middleware works as intended with Duality running as a
-// standalone consumer chain connected to the Cosmos Hub.
-func TestDualityIBCSwapMiddleware(t *testing.T) {
+// TestDualitySwapAndForward asserts that the swap and forward middleware stack works as intended with Duality running as a
+// standalone consumer chain connected to the Cosmos Hub and Osmosis.
+func TestDualitySwapAndForward(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -37,14 +39,15 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 
 	// Create chain factory with Gaia and Duality
 	cf := ibctest.NewBuiltinChainFactory(zaptest.NewLogger(t), []*ibctest.ChainSpec{
-		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: "cosmoshub-4", GasPrices: "0.0uatom"}},
-		{Name: "duality", ChainConfig: chainCfg, NumValidators: &nv, NumFullNodes: &nf}},
+		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: "cosmoshub-1", GasPrices: "0.0uatom"}},
+		{Name: "duality", ChainConfig: chainCfg, NumValidators: &nv, NumFullNodes: &nf},
+		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: "cosmoshub-2", GasPrices: "0.0uatom"}}},
 	)
 
 	// Get both chains from the chain factory
 	chains, err := cf.Chains(t.Name())
 	require.NoError(t, err)
-	gaia, duality := chains[0].(*cosmos.CosmosChain), chains[1].(*cosmos.CosmosChain)
+	gaia, duality, chainC := chains[0].(*cosmos.CosmosChain), chains[1].(*cosmos.CosmosChain), chains[2].(*cosmos.CosmosChain)
 
 	ctx := context.Background()
 	client, network := ibctest.DockerSetup(t)
@@ -61,6 +64,7 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	// We only use this for spinning up Gaia and initializing the relayer config because there is no ICS support for Duality.
 	ic := ibctest.NewInterchain().
 		AddChain(gaia).
+		AddChain(chainC).
 		AddRelayer(r, "relayer")
 
 	rep := testreporter.NewNopReporter()
@@ -109,12 +113,21 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	rlyGaiaKey.Mnemonic = rlyGaiaMnemonic
 
+	osmosisKey, err := ibctest.GetAndFundTestUserWithMnemonic(ctx, t.Name(), osmosisUserMnemonic, genesisWalletAmount, chainC)
+	require.NoError(t, err)
+	osmosisKey.Mnemonic = osmosisUserMnemonic
+
+	rlyOsmosisKey, err := ibctest.GetAndFundTestUserWithMnemonic(ctx, t.Name(), rlyOsmosisMnemonic, genesisWalletAmount, chainC)
+	require.NoError(t, err)
+	rlyOsmosisKey.Mnemonic = rlyOsmosisMnemonic
+
 	// Wait a few blocks to ensure the wallets are created and funded
 	err = test.WaitForBlocks(ctx, 5, gaia)
 	require.NoError(t, err)
 
 	// Get our bech32 encoded user address
 	gaiaAddr := gaiaKey.Bech32Address(gaia.Config().Bech32Prefix)
+	osmosisAddr := osmosisKey.Bech32Address(chainC.Config().Bech32Prefix)
 
 	// Get the original acc balances on both chains for their native tokens
 	gaiaOrigBalNative, err := gaia.GetBalance(ctx, gaiaAddr, gaia.Config().Denom)
@@ -132,6 +145,9 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	err = r.AddChainConfiguration(ctx, eRep, duality.Config(), rlyDualityKey.KeyName, duality.GetRPCAddress(), duality.GetGRPCAddress())
 	require.NoError(t, err)
 
+	err = r.AddChainConfiguration(ctx, eRep, chainC.Config(), rlyOsmosisKey.KeyName, chainC.GetRPCAddress(), chainC.GetGRPCAddress())
+	require.NoError(t, err)
+
 	// Configure keys for the relayer to use for both chains
 	err = r.RestoreKey(ctx, eRep, gaia.Config().ChainID, rlyGaiaKey.KeyName, rlyGaiaKey.Mnemonic)
 	require.NoError(t, err)
@@ -139,16 +155,25 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	err = r.RestoreKey(ctx, eRep, duality.Config().ChainID, rlyDualityKey.KeyName, rlyDualityKey.Mnemonic)
 	require.NoError(t, err)
 
+	err = r.RestoreKey(ctx, eRep, chainC.Config().ChainID, rlyOsmosisKey.KeyName, rlyOsmosisKey.Mnemonic)
+	require.NoError(t, err)
+
 	// Create a new path in the relayer config for the Gaia<>Duality path
 	err = r.GeneratePath(ctx, eRep, gaia.Config().ChainID, duality.Config().ChainID, pathGaiaDuality)
+	require.NoError(t, err)
+
+	err = r.GeneratePath(ctx, eRep, chainC.Config().ChainID, duality.Config().ChainID, pathDualityOsmosis)
 	require.NoError(t, err)
 
 	// Link the path between Gaia and Duality
 	err = r.LinkPath(ctx, eRep, pathGaiaDuality, ibc.DefaultChannelOpts(), ibc.CreateClientOptions{TrustingPeriod: "330h"})
 	require.NoError(t, err)
 
+	err = r.LinkPath(ctx, eRep, pathDualityOsmosis, ibc.DefaultChannelOpts(), ibc.CreateClientOptions{TrustingPeriod: "330h"})
+	require.NoError(t, err)
+
 	// Start the relayer
-	require.NoError(t, r.StartRelayer(ctx, eRep, pathGaiaDuality))
+	require.NoError(t, r.StartRelayer(ctx, eRep, pathGaiaDuality, pathDualityOsmosis))
 
 	t.Cleanup(
 		func() {
@@ -160,10 +185,15 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	)
 
 	// Get channel between Gaia and Duality
-	channels, err := r.GetChannels(ctx, eRep, gaia.Config().ChainID)
+	gaiaChannels, err := r.GetChannels(ctx, eRep, gaia.Config().ChainID)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(channels))
-	gaiaChannel := channels[0]
+	require.Equal(t, 1, len(gaiaChannels))
+	gaiaChannel := gaiaChannels[0]
+
+	osmosisChannels, err := r.GetChannels(ctx, eRep, chainC.Config().ChainID)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(osmosisChannels))
+	osmosisChannel := osmosisChannels[0]
 
 	// Compose details for an IBC transfer
 	transfer := ibc.WalletAmount{
@@ -189,6 +219,10 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	// Get the IBC denom for ATOM on Duality
 	gaiaTokenDenom := transfertypes.GetPrefixedDenom(gaiaChannel.Counterparty.PortID, gaiaChannel.Counterparty.ChannelID, gaia.Config().Denom)
 	gaiaDenomTrace := transfertypes.ParseDenomTrace(gaiaTokenDenom)
+
+	// Get the IBC denom for ATOM on Osmosis which has moved through Duality
+	osmosisTokenDenom := transfertypes.GetPrefixedDenom(osmosisChannel.PortID, osmosisChannel.ChannelID, duality.Config().Denom)
+	osmosisDenomTrace := transfertypes.ParseDenomTrace(osmosisTokenDenom)
 
 	// Assert that the funds are gone from the acc on Gaia and present in the acc on Duality
 	gaiaBalTransfer, err := gaia.GetBalance(ctx, gaiaAddr, gaia.Config().Denom)
@@ -242,6 +276,20 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	swapAmount := sdktypes.NewInt(100000)
 	minOut := sdktypes.NewInt(100000)
 
+	retries := uint8(0)
+	forwardMetadata := forwardtypes.PacketMetadata{
+		Forward: &forwardtypes.ForwardMetadata{
+			Receiver: osmosisAddr,
+			Port:     osmosisChannel.Counterparty.PortID,
+			Channel:  osmosisChannel.Counterparty.ChannelID,
+			Timeout:  5 * time.Minute,
+			Retries:  &retries,
+			Next:     nil,
+		}}
+
+	bz, err := json.Marshal(forwardMetadata)
+	require.NoError(t, err)
+
 	metadata := swaptypes.PacketMetadata{
 		Swap: &swaptypes.SwapMetadata{
 			MsgSwap: &types.MsgSwap{
@@ -253,7 +301,7 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 				TokenIn:  gaiaDenomTrace.IBCDenom(),
 				MinOut:   minOut,
 			},
-			Next: "",
+			Next: string(bz),
 		},
 	}
 
@@ -268,7 +316,7 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	require.NoError(t, err)
 
 	// Poll for the ack to know that the swap is complete
-	_, err = test.PollForAck(ctx, gaia, gaiaHeight, gaiaHeight+10, transferTx.Packet)
+	_, err = test.PollForAck(ctx, gaia, gaiaHeight, gaiaHeight+15, transferTx.Packet)
 	require.NoError(t, err)
 
 	// Check that the funds are moved out of the acc on Gaia
@@ -276,12 +324,21 @@ func TestDualityIBCSwapMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, gaiaBalTransfer-ibcTransferAmount, gaiaBalAfterSwap)
 
-	// Check that the funds are now present in the acc on Duality
+	require.NoError(t, test.WaitForBlocks(ctx, 20, duality, chainC))
+
+	// Check that the funds are now present in the acc on Osmosis
 	dualityBalNativeSwap, err := duality.GetBalance(ctx, dualityKey.Address, duality.Config().Denom)
 	require.NoError(t, err)
-	require.Equal(t, dualityBalNative+minOut.Int64(), dualityBalNativeSwap)
+	require.Equal(t, dualityBalNative, dualityBalNativeSwap)
 
 	dualityBalIBCSwap, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
 	require.NoError(t, err)
 	require.Equal(t, dualityBalIBC, dualityBalIBCSwap)
+
+	//t.Log("PAUSING...")
+	//time.Sleep(5 * time.Minute)
+
+	osmosisBal, err := chainC.GetBalance(ctx, osmosisAddr, osmosisDenomTrace.IBCDenom())
+	require.NoError(t, err)
+	require.Equal(t, minOut.Int64(), osmosisBal)
 }
