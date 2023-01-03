@@ -37,23 +37,23 @@ func TestDualitySwapAndForward(t *testing.T) {
 	nv := 1
 	nf := 0
 
-	// Create chain factory with Gaia and Duality
+	// Create chain factory with 3 chains
 	cf := ibctest.NewBuiltinChainFactory(zaptest.NewLogger(t), []*ibctest.ChainSpec{
-		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: "cosmoshub-1", GasPrices: "0.0uatom"}},
+		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: "chain-a", GasPrices: "0.0uatom"}},
 		{Name: "duality", ChainConfig: chainCfg, NumValidators: &nv, NumFullNodes: &nf},
-		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: "cosmoshub-2", GasPrices: "0.0uatom"}}},
+		{Name: "gaia", Version: "strangelove-forward_middleware_memo_v3", ChainConfig: ibc.ChainConfig{ChainID: "chain-c", GasPrices: "0.0uatom"}}},
 	)
 
-	// Get both chains from the chain factory
+	// Get chains from the chain factory
 	chains, err := cf.Chains(t.Name())
 	require.NoError(t, err)
-	gaia, duality, chainC := chains[0].(*cosmos.CosmosChain), chains[1].(*cosmos.CosmosChain), chains[2].(*cosmos.CosmosChain)
-
-	ctx := context.Background()
-	client, network := ibctest.DockerSetup(t)
+	chainA, chainB, chainC := chains[0].(*cosmos.CosmosChain), chains[1].(*cosmos.CosmosChain), chains[2].(*cosmos.CosmosChain)
 
 	// Create relayer factory with the go-relayer
 	// TODO the custom docker image can be removed here once ICS query fix is merged into main in the relayer
+	ctx := context.Background()
+	client, network := ibctest.DockerSetup(t)
+
 	r := ibctest.NewBuiltinRelayerFactory(
 		ibc.CosmosRly,
 		zaptest.NewLogger(t),
@@ -61,9 +61,9 @@ func TestDualitySwapAndForward(t *testing.T) {
 	).Build(t, client, network)
 
 	// Initialize the Interchain object which describes the chains, relayers, and paths between chains
-	// We only use this for spinning up Gaia and initializing the relayer config because there is no ICS support for Duality.
+	// We use this for spinning up chainA and chainC and initializing the relayer config.
 	ic := ibctest.NewInterchain().
-		AddChain(gaia).
+		AddChain(chainA).
 		AddChain(chainC).
 		AddRelayer(r, "relayer")
 
@@ -84,10 +84,10 @@ func TestDualitySwapAndForward(t *testing.T) {
 	})
 
 	// Initialize the Duality nodes
-	err = duality.Initialize(ctx, t.Name(), client, network)
+	err = chainB.Initialize(ctx, t.Name(), client, network)
 	require.NoError(t, err, "failed to initialize duality chain")
 
-	dualityValidator := duality.Validators[0]
+	dualityValidator := chainB.Validators[0]
 
 	// Initialize the Duality node files, create genesis wallets, and start the chain
 	kr := keyring.NewInMemory()
@@ -105,11 +105,11 @@ func TestDualitySwapAndForward(t *testing.T) {
 	})
 
 	// Create and fund a wallet on Gaia for the relayer and a user acc
-	gaiaKey, err := ibctest.GetAndFundTestUserWithMnemonic(ctx, t.Name(), gaiaUserMnemonic, genesisWalletAmount, gaia)
+	gaiaKey, err := ibctest.GetAndFundTestUserWithMnemonic(ctx, t.Name(), gaiaUserMnemonic, genesisWalletAmount, chainA)
 	require.NoError(t, err)
 	gaiaKey.Mnemonic = gaiaUserMnemonic
 
-	rlyGaiaKey, err := ibctest.GetAndFundTestUserWithMnemonic(ctx, t.Name(), rlyGaiaMnemonic, genesisWalletAmount, gaia)
+	rlyGaiaKey, err := ibctest.GetAndFundTestUserWithMnemonic(ctx, t.Name(), rlyGaiaMnemonic, genesisWalletAmount, chainA)
 	require.NoError(t, err)
 	rlyGaiaKey.Mnemonic = rlyGaiaMnemonic
 
@@ -122,47 +122,47 @@ func TestDualitySwapAndForward(t *testing.T) {
 	rlyOsmosisKey.Mnemonic = rlyOsmosisMnemonic
 
 	// Wait a few blocks to ensure the wallets are created and funded
-	err = test.WaitForBlocks(ctx, 5, gaia)
+	err = test.WaitForBlocks(ctx, 5, chainA)
 	require.NoError(t, err)
 
 	// Get our bech32 encoded user address
-	gaiaAddr := gaiaKey.Bech32Address(gaia.Config().Bech32Prefix)
+	gaiaAddr := gaiaKey.Bech32Address(chainA.Config().Bech32Prefix)
 	osmosisAddr := osmosisKey.Bech32Address(chainC.Config().Bech32Prefix)
 
 	// Get the original acc balances on both chains for their native tokens
-	gaiaOrigBalNative, err := gaia.GetBalance(ctx, gaiaAddr, gaia.Config().Denom)
+	gaiaOrigBalNative, err := chainA.GetBalance(ctx, gaiaAddr, chainA.Config().Denom)
 	require.NoError(t, err)
 	require.Equal(t, genesisWalletAmount, gaiaOrigBalNative)
 
-	dualityOrigBalNative, err := duality.GetBalance(ctx, dualityKey.Address, duality.Config().Denom)
+	dualityOrigBalNative, err := chainB.GetBalance(ctx, dualityKey.Address, chainB.Config().Denom)
 	require.NoError(t, err)
 	require.Equal(t, genesisWalletAmount, dualityOrigBalNative)
 
 	// Add chain configs to the relayer for both chains
-	err = r.AddChainConfiguration(ctx, eRep, gaia.Config(), rlyGaiaKey.KeyName, gaia.GetRPCAddress(), gaia.GetGRPCAddress())
+	err = r.AddChainConfiguration(ctx, eRep, chainA.Config(), rlyGaiaKey.KeyName, chainA.GetRPCAddress(), chainA.GetGRPCAddress())
 	require.NoError(t, err)
 
-	err = r.AddChainConfiguration(ctx, eRep, duality.Config(), rlyDualityKey.KeyName, duality.GetRPCAddress(), duality.GetGRPCAddress())
+	err = r.AddChainConfiguration(ctx, eRep, chainB.Config(), rlyDualityKey.KeyName, chainB.GetRPCAddress(), chainB.GetGRPCAddress())
 	require.NoError(t, err)
 
 	err = r.AddChainConfiguration(ctx, eRep, chainC.Config(), rlyOsmosisKey.KeyName, chainC.GetRPCAddress(), chainC.GetGRPCAddress())
 	require.NoError(t, err)
 
 	// Configure keys for the relayer to use for both chains
-	err = r.RestoreKey(ctx, eRep, gaia.Config().ChainID, rlyGaiaKey.KeyName, rlyGaiaKey.Mnemonic)
+	err = r.RestoreKey(ctx, eRep, chainA.Config().ChainID, rlyGaiaKey.KeyName, rlyGaiaKey.Mnemonic)
 	require.NoError(t, err)
 
-	err = r.RestoreKey(ctx, eRep, duality.Config().ChainID, rlyDualityKey.KeyName, rlyDualityKey.Mnemonic)
+	err = r.RestoreKey(ctx, eRep, chainB.Config().ChainID, rlyDualityKey.KeyName, rlyDualityKey.Mnemonic)
 	require.NoError(t, err)
 
 	err = r.RestoreKey(ctx, eRep, chainC.Config().ChainID, rlyOsmosisKey.KeyName, rlyOsmosisKey.Mnemonic)
 	require.NoError(t, err)
 
 	// Create a new path in the relayer config for the Gaia<>Duality path
-	err = r.GeneratePath(ctx, eRep, gaia.Config().ChainID, duality.Config().ChainID, pathGaiaDuality)
+	err = r.GeneratePath(ctx, eRep, chainA.Config().ChainID, chainB.Config().ChainID, pathGaiaDuality)
 	require.NoError(t, err)
 
-	err = r.GeneratePath(ctx, eRep, chainC.Config().ChainID, duality.Config().ChainID, pathDualityOsmosis)
+	err = r.GeneratePath(ctx, eRep, chainC.Config().ChainID, chainB.Config().ChainID, pathDualityOsmosis)
 	require.NoError(t, err)
 
 	// Link the path between Gaia and Duality
@@ -185,7 +185,7 @@ func TestDualitySwapAndForward(t *testing.T) {
 	)
 
 	// Get channel between Gaia and Duality
-	gaiaChannels, err := r.GetChannels(ctx, eRep, gaia.Config().ChainID)
+	gaiaChannels, err := r.GetChannels(ctx, eRep, chainA.Config().ChainID)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(gaiaChannels))
 	gaiaChannel := gaiaChannels[0]
@@ -198,38 +198,38 @@ func TestDualitySwapAndForward(t *testing.T) {
 	// Compose details for an IBC transfer
 	transfer := ibc.WalletAmount{
 		Address: dualityKey.Address,
-		Denom:   gaia.Config().Denom,
+		Denom:   chainA.Config().Denom,
 		Amount:  ibcTransferAmount,
 	}
 
 	// Send an IBC transfer from Gaia to Duality, so we can initialize a pool with the IBC denom token + native Duality token
-	transferTx, err := gaia.SendIBCTransfer(ctx, gaiaChannel.ChannelID, gaiaAddr, transfer, ibc.TransferOptions{
+	transferTx, err := chainA.SendIBCTransfer(ctx, gaiaChannel.ChannelID, gaiaAddr, transfer, ibc.TransferOptions{
 		Timeout: nil,
 		Memo:    "",
 	})
 	require.NoError(t, err)
 
-	gaiaHeight, err := gaia.Height(ctx)
+	gaiaHeight, err := chainA.Height(ctx)
 	require.NoError(t, err)
 
 	// Poll for the ack to know that the transfer is complete
-	_, err = test.PollForAck(ctx, gaia, gaiaHeight, gaiaHeight+10, transferTx.Packet)
+	_, err = test.PollForAck(ctx, chainA, gaiaHeight, gaiaHeight+10, transferTx.Packet)
 	require.NoError(t, err)
 
 	// Get the IBC denom for ATOM on Duality
-	gaiaTokenDenom := transfertypes.GetPrefixedDenom(gaiaChannel.Counterparty.PortID, gaiaChannel.Counterparty.ChannelID, gaia.Config().Denom)
+	gaiaTokenDenom := transfertypes.GetPrefixedDenom(gaiaChannel.Counterparty.PortID, gaiaChannel.Counterparty.ChannelID, chainA.Config().Denom)
 	gaiaDenomTrace := transfertypes.ParseDenomTrace(gaiaTokenDenom)
 
 	// Get the IBC denom for ATOM on Osmosis which has moved through Duality
-	osmosisTokenDenom := transfertypes.GetPrefixedDenom(osmosisChannel.PortID, osmosisChannel.ChannelID, duality.Config().Denom)
+	osmosisTokenDenom := transfertypes.GetPrefixedDenom(osmosisChannel.PortID, osmosisChannel.ChannelID, chainB.Config().Denom)
 	osmosisDenomTrace := transfertypes.ParseDenomTrace(osmosisTokenDenom)
 
 	// Assert that the funds are gone from the acc on Gaia and present in the acc on Duality
-	gaiaBalTransfer, err := gaia.GetBalance(ctx, gaiaAddr, gaia.Config().Denom)
+	gaiaBalTransfer, err := chainA.GetBalance(ctx, gaiaAddr, chainA.Config().Denom)
 	require.NoError(t, err)
 	require.Equal(t, gaiaOrigBalNative-ibcTransferAmount, gaiaBalTransfer)
 
-	dualityBalIBCTransfer, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
+	dualityBalIBCTransfer, err := chainB.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
 	require.NoError(t, err)
 	require.Equal(t, ibcTransferAmount, dualityBalIBCTransfer)
 
@@ -237,37 +237,37 @@ func TestDualitySwapAndForward(t *testing.T) {
 	depositAmount := sdktypes.NewInt(100000)
 
 	depositCmd := []string{
-		duality.Config().Bin, "tx", "dex", "deposit",
+		chainB.Config().Bin, "tx", "dex", "deposit",
 		dualityKey.Address,
-		duality.Config().Denom,
+		chainB.Config().Denom,
 		gaiaDenomTrace.IBCDenom(),
 		depositAmount.String(),
 		depositAmount.String(),
 		"0",
 		"1",
-		"--chain-id", duality.Config().ChainID,
-		"--node", duality.GetRPCAddress(),
+		"--chain-id", chainB.Config().ChainID,
+		"--node", chainB.GetRPCAddress(),
 		"--from", dualityKey.KeyName,
 		"--keyring-backend", "test",
 		"--gas", "auto",
 		"--yes",
-		"--home", duality.HomeDir(),
+		"--home", chainB.HomeDir(),
 	}
 
 	// Execute the deposit cmd to initialize the pool on Duality
-	_, _, err = duality.Exec(ctx, depositCmd, nil)
+	_, _, err = chainB.Exec(ctx, depositCmd, nil)
 	require.NoError(t, err)
 
 	// Wait for the tx to be included in a block
-	err = test.WaitForBlocks(ctx, 5, duality)
+	err = test.WaitForBlocks(ctx, 5, chainB)
 	require.NoError(t, err)
 
 	// Assert that the deposit was successful and the funds are moved out of the Duality user acc
-	dualityBalIBC, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
+	dualityBalIBC, err := chainB.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
 	require.NoError(t, err)
 	require.Equal(t, dualityBalIBCTransfer-depositAmount.Int64(), dualityBalIBC)
 
-	dualityBalNative, err := duality.GetBalance(ctx, dualityKey.Address, duality.Config().Denom)
+	dualityBalNative, err := chainB.GetBalance(ctx, dualityKey.Address, chainB.Config().Denom)
 	require.NoError(t, err)
 	require.Equal(t, dualityOrigBalNative-depositAmount.Int64(), dualityBalNative)
 
@@ -296,7 +296,7 @@ func TestDualitySwapAndForward(t *testing.T) {
 				Creator:  dualityKey.Address,
 				Receiver: dualityKey.Address,
 				TokenA:   gaiaDenomTrace.IBCDenom(),
-				TokenB:   duality.Config().Denom,
+				TokenB:   chainB.Config().Denom,
 				AmountIn: swapAmount,
 				TokenIn:  gaiaDenomTrace.IBCDenom(),
 				MinOut:   minOut,
@@ -308,35 +308,29 @@ func TestDualitySwapAndForward(t *testing.T) {
 	metadataBz, err := json.Marshal(metadata)
 	require.NoError(t, err)
 
-	gaiaHeight, err = gaia.Height(ctx)
+	gaiaHeight, err = chainA.Height(ctx)
 	require.NoError(t, err)
 
 	// Send an IBC transfer from Gaia to Duality with packet memo containing the swap metadata
-	transferTx, err = gaia.SendIBCTransfer(ctx, gaiaChannel.ChannelID, gaiaAddr, transfer, ibc.TransferOptions{Memo: string(metadataBz)})
+	transferTx, err = chainA.SendIBCTransfer(ctx, gaiaChannel.ChannelID, gaiaAddr, transfer, ibc.TransferOptions{Memo: string(metadataBz)})
 	require.NoError(t, err)
 
-	// Poll for the ack to know that the swap is complete
-	_, err = test.PollForAck(ctx, gaia, gaiaHeight, gaiaHeight+15, transferTx.Packet)
-	require.NoError(t, err)
+	// Wait a few blocks for the forward to happen
+	require.NoError(t, test.WaitForBlocks(ctx, 20, chainB, chainC))
 
 	// Check that the funds are moved out of the acc on Gaia
-	gaiaBalAfterSwap, err := gaia.GetBalance(ctx, gaiaAddr, gaia.Config().Denom)
+	gaiaBalAfterSwap, err := chainA.GetBalance(ctx, gaiaAddr, chainA.Config().Denom)
 	require.NoError(t, err)
 	require.Equal(t, gaiaBalTransfer-ibcTransferAmount, gaiaBalAfterSwap)
 
-	require.NoError(t, test.WaitForBlocks(ctx, 20, duality, chainC))
-
 	// Check that the funds are now present in the acc on Osmosis
-	dualityBalNativeSwap, err := duality.GetBalance(ctx, dualityKey.Address, duality.Config().Denom)
+	dualityBalNativeSwap, err := chainB.GetBalance(ctx, dualityKey.Address, chainB.Config().Denom)
 	require.NoError(t, err)
 	require.Equal(t, dualityBalNative, dualityBalNativeSwap)
 
-	dualityBalIBCSwap, err := duality.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
+	dualityBalIBCSwap, err := chainB.GetBalance(ctx, dualityKey.Address, gaiaDenomTrace.IBCDenom())
 	require.NoError(t, err)
 	require.Equal(t, dualityBalIBC, dualityBalIBCSwap)
-
-	//t.Log("PAUSING...")
-	//time.Sleep(5 * time.Minute)
 
 	osmosisBal, err := chainC.GetBalance(ctx, osmosisAddr, osmosisDenomTrace.IBCDenom())
 	require.NoError(t, err)
