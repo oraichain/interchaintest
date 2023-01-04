@@ -22,15 +22,14 @@ import (
 
 const (
 	aliceKeyName        = "alice"
-	bobKeyName          = "bob"
-	rlyDualityKeyName   = "relayer-duality"
-	rlyGaiaMnemonic     = "turkey sustain spoil ostrich false cradle tackle silent collect maple walnut brave rookie melody busy float monkey large drama romance rib search ride diary"
-	rlyOsmosisMnemonic  = "south document myth salon ribbon behave galaxy annual drama poem crime trick belt naive wedding open crunch ritual wrap clutch lumber capital cruel say"
-	gaiaUserMnemonic    = "obscure reform almost timber anxiety wave use shield choose icon crack visual bunker mountain wild range child cross wedding organ make tube oxygen talent"
-	osmosisUserMnemonic = "foil slogan drift judge scorpion hundred bomb tube praise attend south comic own update physical oil afford crime cage soon private found clip oak"
+	rlyChainBKeyName    = "relayer-duality"
+	rlyChainAMnemonic   = "turkey sustain spoil ostrich false cradle tackle silent collect maple walnut brave rookie melody busy float monkey large drama romance rib search ride diary"
+	rlyChainCMnemonic   = "south document myth salon ribbon behave galaxy annual drama poem crime trick belt naive wedding open crunch ritual wrap clutch lumber capital cruel say"
+	chainAUserMnemonic  = "obscure reform almost timber anxiety wave use shield choose icon crack visual bunker mountain wild range child cross wedding organ make tube oxygen talent"
+	chainCUserMnemonic  = "foil slogan drift judge scorpion hundred bomb tube praise attend south comic own update physical oil afford crime cage soon private found clip oak"
 	genesisWalletAmount = int64(100_000_000)
-	pathGaiaDuality     = "gaia-duality"
-	pathDualityOsmosis  = "duality-osmosis"
+	pathChainAChainB    = "chainA-chainB"
+	pathChainBChainC    = "chainB-chainC"
 	ibcTransferAmount   = int64(100_000)
 )
 
@@ -38,7 +37,7 @@ var (
 	chainCfg = ibc.ChainConfig{
 		Type:    "cosmos",
 		Name:    "duality",
-		ChainID: "duality-1",
+		ChainID: "chain-b",
 		Images: []ibc.DockerImage{{
 			Repository: "duality",
 			Version:    "local",
