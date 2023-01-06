@@ -592,9 +592,9 @@ func TestSwapAndForward_ForwardFails(t *testing.T) {
 	retries := uint8(0)
 	forwardMetadata := forwardtypes.PacketMetadata{
 		Forward: &forwardtypes.ForwardMetadata{
-			Receiver: "invalid-receiver", // use malformed receiver field so the forward fails
+			Receiver: chainCAddr,
 			Port:     chainCChannel.Counterparty.PortID,
-			Channel:  chainCChannel.Counterparty.ChannelID,
+			Channel:  "invalid-channel", // use invalid channel so forward fails
 			Timeout:  5 * time.Minute,
 			Retries:  &retries,
 			Next:     nil,
@@ -628,8 +628,9 @@ func TestSwapAndForward_ForwardFails(t *testing.T) {
 	transferTx, err = chainA.SendIBCTransfer(ctx, chainAChannel.ChannelID, chainAAddr, transfer, ibc.TransferOptions{Memo: string(metadataBz)})
 	require.NoError(t, err)
 
-	// Wait a few blocks for the forward to fail
-	require.NoError(t, test.WaitForBlocks(ctx, 20, chainB, chainC))
+	// Poll for the ack to know that the swap and forward is complete
+	_, err = test.PollForAck(ctx, chainA, chainAHeight, chainAHeight+20, transferTx.Packet)
+	require.NoError(t, err)
 
 	// Check that the funds are moved out of the acc on chainA
 	chainABalAfterSwap, err := chainA.GetBalance(ctx, chainAAddr, chainA.Config().Denom)
@@ -647,5 +648,5 @@ func TestSwapAndForward_ForwardFails(t *testing.T) {
 
 	chainCBal, err := chainC.GetBalance(ctx, chainCAddr, chainCDenomTrace.IBCDenom())
 	require.NoError(t, err)
-	require.Equal(t, 0, chainCBal)
+	require.Equal(t, int64(0), chainCBal)
 }
