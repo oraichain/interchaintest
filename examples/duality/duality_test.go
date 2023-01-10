@@ -21,15 +21,22 @@ import (
 )
 
 const (
-	aliceKeyName        = "alice"
-	rlyChainBKeyName    = "relayer-duality"
-	rlyChainAMnemonic   = "turkey sustain spoil ostrich false cradle tackle silent collect maple walnut brave rookie melody busy float monkey large drama romance rib search ride diary"
-	rlyChainCMnemonic   = "south document myth salon ribbon behave galaxy annual drama poem crime trick belt naive wedding open crunch ritual wrap clutch lumber capital cruel say"
-	chainAUserMnemonic  = "obscure reform almost timber anxiety wave use shield choose icon crack visual bunker mountain wild range child cross wedding organ make tube oxygen talent"
-	chainCUserMnemonic  = "foil slogan drift judge scorpion hundred bomb tube praise attend south comic own update physical oil afford crime cage soon private found clip oak"
+	aliceKeyName     = "alice"
+	rlyChainBKeyName = "relayer-duality"
+
+	rlyChainAMnemonic = "turkey sustain spoil ostrich false cradle tackle silent collect maple walnut brave rookie melody busy float monkey large drama romance rib search ride diary"
+	rlyChainCMnemonic = "south document myth salon ribbon behave galaxy annual drama poem crime trick belt naive wedding open crunch ritual wrap clutch lumber capital cruel say"
+	rlyChainDMnemonic = "toss door brown piece please foot regular globe depend symbol secret valve human window permit canvas frequent volume face clump cook canyon smooth unknown"
+
+	chainAUserMnemonic = "obscure reform almost timber anxiety wave use shield choose icon crack visual bunker mountain wild range child cross wedding organ make tube oxygen talent"
+	chainCUserMnemonic = "foil slogan drift judge scorpion hundred bomb tube praise attend south comic own update physical oil afford crime cage soon private found clip oak"
+	chainDUserMnemonic = "boring paper simple peasant near virtual appear visit crowd orchard slide easy profit remind jacket donor argue guard ask proof special blush trade cross"
+
+	pathChainAChainB = "chainA-chainB"
+	pathChainBChainC = "chainB-chainC"
+	pathChainCChainD = "chainC-chainD"
+
 	genesisWalletAmount = int64(100_000_000)
-	pathChainAChainB    = "chainA-chainB"
-	pathChainBChainC    = "chainB-chainC"
 	ibcTransferAmount   = int64(100_000)
 )
 
