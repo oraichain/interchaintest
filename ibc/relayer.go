@@ -245,11 +245,11 @@ const (
 func (o Order) String() string {
 	switch o {
 	case Unordered:
-		return "unordered"
+		return "ORDER_UNORDERED"
 	case Ordered:
-		return "ordered"
+		return "ORDER_ORDERED"
 	default:
-		return "invalid"
+		return "ORDER_NONE_UNSPECIFIED"
 	}
 }
 
